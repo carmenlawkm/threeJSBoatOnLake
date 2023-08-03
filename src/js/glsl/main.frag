@@ -1,6 +1,25 @@
-varying vec2 vUv;
+uniform vec3 color;
+uniform sampler2D tDiffuse;
+uniform sampler2D tDudv;
+uniform float time;
+varying vec4 vUv;
+
+#include <logdepthbuf_pars_fragment>
 
 void main() {
-  vec3 color = vec3(1.);
-  gl_FragColor.a = vec4(color, 1.);
+  #include <logdepthbuf_fragment>
+  float waveStrength = 0.15;
+  float waveSpeed = 0.02;
+  vec2 distortedUv = texture2D( tDudv, vec2( vUv.x + time * waveSpeed, vUv.y ) ).rg * waveStrength;
+  distortedUv = vUv.xy + vec2( distortedUv.x, distortedUv.y + time * waveSpeed );
+  vec2 distortion = ( texture2D( tDudv, distortedUv ).rg * 2.0 - 1.0 ) * waveStrength;
+
+  // new uv coords
+  vec4 uv = vec4( vUv );
+  uv.xy += distortion;
+
+  vec4 base = texture2DProj( tDiffuse, uv ); // uv is vuv with distortion
+  gl_FragColor = vec4( mix( base.rgb, color, 0.5 ), 1.0 ); 
+  #include <tonemapping_fragment>
+  #include <encodings_fragment>
 }

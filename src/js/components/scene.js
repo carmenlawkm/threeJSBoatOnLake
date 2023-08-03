@@ -5,13 +5,28 @@ import {
   PerspectiveCamera,
   Mesh,
   SphereGeometry,
-  MeshMatcapMaterial,
-  AxesHelper,
+  MeshLambertMaterial,
+  Texture,
+  DirectionalLight,
+  AmbientLight,
+  CircleGeometry,
+  RepeatWrapping,
+  BufferGeometry,
+  BufferAttribute,
+  PointsMaterial,
+  Points,
+  Vector3,
+  
 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { Reflector } from 'three/addons/objects/Reflector.js'
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+
 import Stats from 'stats-js'
 import LoaderManager from '@/js/managers/LoaderManager'
-import GUI from 'lil-gui'
+import vertexShader from '../glsl/main.vert'
+import fragmentShader from '../glsl/main.frag'
+import { randFloat } from 'three/src/math/MathUtils'
 
 export default class MainScene {
   #canvas
@@ -22,11 +37,9 @@ export default class MainScene {
   #stats
   #width
   #height
-  #mesh
-  #guiObj = {
-    y: 0,
-    showTitle: true,
-  }
+  #sphereMesh
+  #groundMirror
+  #boatMesh
 
   constructor() {
     this.#canvas = document.querySelector('.scene')
@@ -38,33 +51,30 @@ export default class MainScene {
     // Preload assets before initiating the scene
     const assets = [
       {
-        name: 'matcap',
-        texture: './img/matcap.png',
+        name: 'waterdudv',
+        texture: './img/waterdudv.jpg',
       },
     ]
 
     await LoaderManager.load(assets)
 
     this.setStats()
-    this.setGUI()
     this.setScene()
     this.setRender()
     this.setCamera()
     this.setControls()
-    this.setAxesHelper()
 
     this.setSphere()
+    this.setBoat()
+    this.setLights()
+    this.setReflector()
+    this.setBackgroundStars()
 
     this.handleResize()
 
-    // start RAF
     this.events()
   }
 
-  /**
-   * Our Webgl renderer, an object that will draw everything in our canvas
-   * https://threejs.org/docs/?q=rend#api/en/renderers/WebGLRenderer
-   */
   setRender() {
     this.#renderer = new WebGLRenderer({
       canvas: this.#canvas,
@@ -72,22 +82,15 @@ export default class MainScene {
     })
   }
 
-  /**
-   * This is our scene, we'll add any object
-   * https://threejs.org/docs/?q=scene#api/en/scenes/Scene
-   */
+  // add all the objects in the scene here
   setScene() {
     this.#scene = new Scene()
-    this.#scene.background = new Color(0xffffff)
+    const gradientColors = ['#8e5d7c','#3f3c6d','#1e1933'];
+    const gradientTexture = new Texture(createGradientCanvas(window.innerWidth, window.innerHeight, gradientColors));
+    gradientTexture.needsUpdate = true;
+    this.#scene.background = gradientTexture
   }
 
-  /**
-   * Our Perspective camera, this is the point of view that we'll have
-   * of our scene.
-   * A perscpective camera is mimicing the human eyes so something far we'll
-   * look smaller than something close
-   * https://threejs.org/docs/?q=pers#api/en/cameras/PerspectiveCamera
-   */
   setCamera() {
     const aspectRatio = this.#width / this.#height
     const fieldOfView = 60
@@ -95,7 +98,7 @@ export default class MainScene {
     const farPlane = 10000
 
     this.#camera = new PerspectiveCamera(fieldOfView, aspectRatio, nearPlane, farPlane)
-    this.#camera.position.y = 5
+    this.#camera.position.y = 1
     this.#camera.position.x = 5
     this.#camera.position.z = 5
     this.#camera.lookAt(0, 0, 0)
@@ -103,63 +106,77 @@ export default class MainScene {
     this.#scene.add(this.#camera)
   }
 
-  /**
-   * Threejs controls to have controls on our scene
-   * https://threejs.org/docs/?q=orbi#examples/en/controls/OrbitControls
-   */
   setControls() {
     this.#controls = new OrbitControls(this.#camera, this.#renderer.domElement)
-    this.#controls.enableDamping = true
-    // this.#controls.dampingFactor = 0.04
   }
 
-  /**
-   * Axes Helper
-   * https://threejs.org/docs/?q=Axesh#api/en/helpers/AxesHelper
-   */
-  setAxesHelper() {
-    const axesHelper = new AxesHelper(3)
-    this.#scene.add(axesHelper)
+  setLights() {
+    const directionalLight = new DirectionalLight(0xfff8ad, 0.6);
+    directionalLight.position.z = 1;
+    directionalLight.position.x = -1;
+    this.#scene.add(directionalLight);
+    const ambientLight = new AmbientLight(0xf8c2ff, 0.4);
+    this.#scene.add(ambientLight);
   }
 
-  /**
-   * Create a SphereGeometry
-   * https://threejs.org/docs/?q=box#api/en/geometries/SphereGeometry
-   * with a Basic material
-   * https://threejs.org/docs/?q=mesh#api/en/materials/MeshBasicMaterial
-   */
+  setBackgroundStars() {
+    const geometry = new BufferGeometry();
+    // create multiple particles
+    const vertices = [];
+    const range = 700;
+    for (let i = 0; i < 3000; i++) {
+      const points = new Vector3(randFloat(-range, range), randFloat(-range, 500), randFloat(-range, 500));
+      vertices.push(...points);
+    }
+    geometry.setAttribute( 'position', new BufferAttribute( new Float32Array(vertices), 3 ) );
+    const material = new PointsMaterial( { color: 0xffffff } );
+    const mesh = new Points( geometry, material );
+    this.#scene.add(mesh);
+  }
+
+  // code from three.js example: https://github.com/mrdoob/three.js/blob/master/examples/webgl_mirror.html
+  setReflector() {
+    let geometry = new CircleGeometry( 50, 64 );
+    const customShader = Reflector.ReflectorShader;
+    customShader.vertexShader = vertexShader;
+    customShader.fragmentShader = fragmentShader;
+
+    const dudvMap = LoaderManager.assets['waterdudv'].texture;
+
+    dudvMap.wrapS = dudvMap.wrapT = RepeatWrapping;
+    customShader.uniforms.tDudv = { value: dudvMap };
+    customShader.uniforms.time = { value: 0 };
+
+    this.#groundMirror = new Reflector( geometry, {
+      shader: customShader, // apply the custom shader to make the displacement
+      clipBias: 0.003,
+      textureWidth: window.innerWidth,
+      textureHeight: window.innerHeight,
+      color: 0x191928
+    } );
+    this.#groundMirror.position.y = 0;
+    this.#groundMirror.rotateX( - Math.PI / 2 );
+    this.#scene.add( this.#groundMirror );
+  }
+
   setSphere() {
     const geometry = new SphereGeometry(1, 32, 32)
-    const material = new MeshMatcapMaterial({ matcap: LoaderManager.assets['matcap'].texture })
+    const material = new MeshLambertMaterial({color: '#ffffff' })
 
-    this.#mesh = new Mesh(geometry, material)
-    this.#scene.add(this.#mesh)
+    this.#sphereMesh = new Mesh(geometry, material)
+    this.#scene.add(this.#sphereMesh)
   }
 
-  /**
-   * Build stats to display fps
-   */
+  setBoat() {
+    this.loadOBJModel('./obj/boat.obj'); // boat model
+  }
+
   setStats() {
     this.#stats = new Stats()
     this.#stats.showPanel(0)
-    document.body.appendChild(this.#stats.dom)
+    // document.body.appendChild(this.#stats.dom)
   }
 
-  setGUI() {
-    const titleEl = document.querySelector('.main-title')
-
-    const handleChange = () => {
-      this.#mesh.position.y = this.#guiObj.y
-      titleEl.style.display = this.#guiObj.showTitle ? 'block' : 'none'
-    }
-
-    const gui = new GUI()
-    gui.add(this.#guiObj, 'y', -3, 3).onChange(handleChange)
-    gui.add(this.#guiObj, 'showTitle').name('show title').onChange(handleChange)
-  }
-  /**
-   * List of events
-   */
   events() {
     window.addEventListener('resize', this.handleResize, { passive: true })
     this.draw(0)
@@ -173,12 +190,14 @@ export default class MainScene {
    * Everything that happens in the scene is drawed here
    * @param {Number} now
    */
-  draw = () => {
+  draw = (time) => {
     // now: time in ms
     this.#stats.begin()
 
-    if (this.#controls) this.#controls.update() // for damping
-    this.#renderer.render(this.#scene, this.#camera)
+    if (this.#controls) this.#controls.update(); // for damping
+    this.#renderer.render(this.#scene, this.#camera);
+    this.#sphereMesh.position.y = Math.sin(time/1000)*0.1 + 0.8;
+    this.#groundMirror.material.uniforms.time.value += 0.1;
 
     this.#stats.end()
     this.raf = window.requestAnimationFrame(this.draw)
@@ -201,4 +220,40 @@ export default class MainScene {
     this.#renderer.setPixelRatio(DPR)
     this.#renderer.setSize(this.#width, this.#height)
   }
+
+  loadOBJModel = (url) => {
+    const loader = new OBJLoader();
+    loader.load(
+    url,
+    (object) => {
+      this.#scene.add(object);
+    },
+    (xhr) => {
+      console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+    },
+    (error) => {
+      console.error('An error loading an obj', error);
+    }
+    );
+  };
+  
+}
+
+// for rendering the background colour of the sky
+function createGradientCanvas (width, height, colors) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+
+  colors.forEach((color, index) => {
+    gradient.addColorStop(index / (colors.length - 1), color);
+  });
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+
+  return canvas;
 }
