@@ -4,7 +4,7 @@ import {
   Scene,
   PerspectiveCamera,
   Mesh,
-  SphereGeometry,
+  PointLight,
   MeshLambertMaterial,
   Texture,
   DirectionalLight,
@@ -16,9 +16,14 @@ import {
   PointsMaterial,
   Points,
   Vector3,
+  Vector2,
+  BoxGeometry
   
 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 
@@ -40,6 +45,8 @@ export default class MainScene {
   #sphereMesh
   #groundMirror
   #boatMesh
+  #bloomComposer
+  #glowingScene
 
   constructor() {
     this.#canvas = document.querySelector('.scene')
@@ -72,6 +79,7 @@ export default class MainScene {
     this.setLights()
     this.setReflector()
     this.setBackgroundStars()
+    this.setPaperLanterns()
 
     this.handleResize()
 
@@ -85,7 +93,6 @@ export default class MainScene {
     })
   }
 
-  // add all the objects in the scene here
   setScene() {
     this.#scene = new Scene()
     const gradientColors = ['#8e5d7c','#3f3c6d','#1e1933'];
@@ -137,9 +144,51 @@ export default class MainScene {
     this.#scene.add(mesh);
   }
 
+  setPaperLanterns() {
+    const lanternGeometry = new BoxGeometry(0.4, 0.6, 0.4);
+    const lanternMaterial = new MeshLambertMaterial({ color: 0x403f3a,  emissive: 0xdeca62 });
+    
+    for (let i = 0; i< 150; i++) {
+      const lanternMesh = new Mesh(lanternGeometry, lanternMaterial);
+
+      // Generate random positions within the range
+      const x = (Math.random() - 0.5) * 30;
+      const y = (Math.random() - 0.5) * 30 + 15;
+      const z = (Math.random() - 0.5) * 30;
+
+      // point light inside the mesh to glow
+      const pointLight = new PointLight(0xffcc00, 2, 15);
+      pointLight.position.set(x, y, z);
+      lanternMesh.add(pointLight);
+
+      lanternMesh.position.set(x, y, z); 
+      this.#scene.add(lanternMesh);
+    }
+    
+
+    const renderScene = new RenderPass(this.#scene, this.#camera);
+    const bloomPass = new UnrealBloomPass(
+      new Vector2(window.innerWidth, window.innerHeight),
+      0.02,
+      0.04,
+      0.02
+    );
+    bloomPass.threshold = 0.25;
+    bloomPass.strength = 0.35;
+    bloomPass.radius = 0.1;
+
+    const bloomComposer = new EffectComposer(this.#renderer);
+    bloomComposer.setSize(window.innerWidth, window.innerHeight);
+    bloomComposer.renderToScreen = true;
+    bloomComposer.addPass(renderScene);
+    bloomComposer.addPass(bloomPass);
+    this.#bloomComposer = bloomComposer;
+
+  }
+
   // code from three.js example: https://github.com/mrdoob/three.js/blob/master/examples/webgl_mirror.html
   setReflector() {
-    let geometry = new CircleGeometry( 50, 64 );
+    let geometry = new CircleGeometry( 70, 64 );
     const customShader = Reflector.ReflectorShader;
     customShader.vertexShader = vertexShader;
     customShader.fragmentShader = fragmentShader;
@@ -191,7 +240,6 @@ export default class MainScene {
   setStats() {
     this.#stats = new Stats()
     this.#stats.showPanel(0)
-    // document.body.appendChild(this.#stats.dom)
   }
 
   events() {
@@ -212,9 +260,13 @@ export default class MainScene {
     this.#stats.begin()
 
     if (this.#controls) this.#controls.update(); // for damping
+
+    this.#renderer.autoClear = false;
+    this.#renderer.clear();
     this.#renderer.render(this.#scene, this.#camera);
     if (this.#boatMesh) this.#boatMesh.position.y = Math.sin(time/1000)*0.05-0.08;
     this.#groundMirror.material.uniforms.time.value += 0.1;
+    this.#bloomComposer.render();
 
     this.#stats.end()
     this.raf = window.requestAnimationFrame(this.draw)
