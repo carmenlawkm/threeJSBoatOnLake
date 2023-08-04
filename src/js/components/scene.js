@@ -54,6 +54,10 @@ export default class MainScene {
         name: 'waterdudv',
         texture: './img/waterdudv.jpg',
       },
+      {
+        name: 'boatBase',
+        texture: './img/boat_base_colour.PNG',
+      },
     ]
 
     await LoaderManager.load(assets)
@@ -64,7 +68,6 @@ export default class MainScene {
     this.setCamera()
     this.setControls()
 
-    this.setSphere()
     this.setBoat()
     this.setLights()
     this.setReflector()
@@ -159,16 +162,30 @@ export default class MainScene {
     this.#scene.add( this.#groundMirror );
   }
 
-  setSphere() {
-    const geometry = new SphereGeometry(1, 32, 32)
-    const material = new MeshLambertMaterial({color: '#ffffff' })
-
-    this.#sphereMesh = new Mesh(geometry, material)
-    this.#scene.add(this.#sphereMesh)
-  }
-
   setBoat() {
-    this.loadOBJModel('./obj/boat.obj'); // boat model
+    const url = './obj/boat.obj';
+    const boatBaseColour = LoaderManager.assets['boatBase'].texture;
+    const loader = new OBJLoader();
+    loader.load(
+    url,
+    (object) => {
+      // set the material/ colour
+      object.traverse((child) => {
+        if (child instanceof Mesh) {
+          child.material = new MeshLambertMaterial({map: boatBaseColour});
+        }
+      });
+      this.#boatMesh = object;
+      this.#boatMesh.scale.set(0.5,0.5,0.5)
+      this.#scene.add(this.#boatMesh);
+    }
+    ),
+    (xhr) => {
+      console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+    },
+    (error) => {
+      console.error('An error loading the boat', error);
+    };  
   }
 
   setStats() {
@@ -196,17 +213,13 @@ export default class MainScene {
 
     if (this.#controls) this.#controls.update(); // for damping
     this.#renderer.render(this.#scene, this.#camera);
-    this.#sphereMesh.position.y = Math.sin(time/1000)*0.1 + 0.8;
+    if (this.#boatMesh) this.#boatMesh.position.y = Math.sin(time/1000)*0.05-0.08;
     this.#groundMirror.material.uniforms.time.value += 0.1;
 
     this.#stats.end()
     this.raf = window.requestAnimationFrame(this.draw)
   }
 
-  /**
-   * On resize, we need to adapt our camera based
-   * on the new window width and height and the renderer
-   */
   handleResize = () => {
     this.#width = window.innerWidth
     this.#height = window.innerHeight
@@ -220,22 +233,6 @@ export default class MainScene {
     this.#renderer.setPixelRatio(DPR)
     this.#renderer.setSize(this.#width, this.#height)
   }
-
-  loadOBJModel = (url) => {
-    const loader = new OBJLoader();
-    loader.load(
-    url,
-    (object) => {
-      this.#scene.add(object);
-    },
-    (xhr) => {
-      console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
-    },
-    (error) => {
-      console.error('An error loading an obj', error);
-    }
-    );
-  };
   
 }
 
