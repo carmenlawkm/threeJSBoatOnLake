@@ -17,8 +17,9 @@ import {
   Points,
   Vector3,
   Vector2,
-  BoxGeometry
-  
+  BoxGeometry,
+  SpriteMaterial,
+  Sprite
 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -42,11 +43,10 @@ export default class MainScene {
   #stats
   #width
   #height
-  #sphereMesh
   #groundMirror
   #boatMesh
   #bloomComposer
-  #glowingScene
+  #mountainSprite
 
   constructor() {
     this.#canvas = document.querySelector('.scene')
@@ -65,6 +65,10 @@ export default class MainScene {
         name: 'boatBase',
         texture: './img/boat_base_colour.PNG',
       },
+      {
+        name: 'mountain',
+        texture: './img/mountainSil.png'
+      }
     ]
 
     await LoaderManager.load(assets)
@@ -77,9 +81,10 @@ export default class MainScene {
 
     this.setBoat()
     this.setLights()
-    this.setReflector()
     this.setBackgroundStars()
     this.setPaperLanterns()
+    this.setMountain()
+    this.setReflector()
 
     this.handleResize()
 
@@ -157,7 +162,7 @@ export default class MainScene {
       const z = (Math.random() - 0.5) * 30;
 
       // point light inside the mesh to glow
-      const pointLight = new PointLight(0xffcc00, 2, 15);
+      const pointLight = new PointLight(0xffcc00, 10, 10);
       pointLight.position.set(x, y, z);
       lanternMesh.add(pointLight);
 
@@ -174,7 +179,7 @@ export default class MainScene {
       0.02
     );
     bloomPass.threshold = 0.25;
-    bloomPass.strength = 0.35;
+    bloomPass.strength = 0.45;
     bloomPass.radius = 0.1;
 
     const bloomComposer = new EffectComposer(this.#renderer);
@@ -184,6 +189,17 @@ export default class MainScene {
     bloomComposer.addPass(bloomPass);
     this.#bloomComposer = bloomComposer;
 
+  }
+
+  setMountain() {
+    const mountainSpriteTexture = LoaderManager.assets['mountain'].texture;
+    const mountainSpriteMaterial = new SpriteMaterial({ map: mountainSpriteTexture });
+    const mountainSprite = new Sprite(mountainSpriteMaterial);
+    mountainSprite.position.set(-50, 16, -50);
+    mountainSprite.scale.set(150,40,40);
+    
+    this.#mountainSprite = mountainSprite;
+    this.#scene.add(this.#mountainSprite);
   }
 
   // code from three.js example: https://github.com/mrdoob/three.js/blob/master/examples/webgl_mirror.html
@@ -268,6 +284,8 @@ export default class MainScene {
     this.#groundMirror.material.uniforms.time.value += 0.1;
     this.#bloomComposer.render();
 
+    updateMountainSprite(this.#camera, this.#mountainSprite);
+
     this.#stats.end()
     this.raf = window.requestAnimationFrame(this.draw)
   }
@@ -305,4 +323,11 @@ function createGradientCanvas (width, height, colors) {
   ctx.fillRect(0, 0, width, height);
 
   return canvas;
+}
+
+// want the sprite to face the camera no matter what
+function updateMountainSprite(camera, mountainSprite) {
+  const cameraPosition = camera.position.clone();
+  cameraPosition.y = mountainSprite.position.y;
+  mountainSprite.lookAt(cameraPosition);
 }
