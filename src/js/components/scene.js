@@ -46,7 +46,7 @@ export default class MainScene {
   #groundMirror
   #boatMesh
   #bloomComposer
-  #mountainSprite
+  #mountain
 
   constructor() {
     this.#canvas = document.querySelector('.scene')
@@ -68,7 +68,11 @@ export default class MainScene {
       {
         name: 'mountain',
         texture: './img/mountainSil.png'
-      }
+      },
+      {
+        name: 'paper',
+        texture: './img/paper.jpg'
+      },
     ]
 
     await LoaderManager.load(assets)
@@ -84,6 +88,11 @@ export default class MainScene {
     this.setBackgroundStars()
     this.setPaperLanterns()
     this.setMountain()
+    this.setTree(-15, 7, -75)
+    this.setTree(-5, 7, -75)
+    this.setTree(-45, 6, -22)
+    this.setTree(-65, 6, -25)
+    this.setTree(-85, 6, -5)
     this.setReflector()
 
     this.handleResize()
@@ -150,24 +159,48 @@ export default class MainScene {
   }
 
   setPaperLanterns() {
-    const lanternGeometry = new BoxGeometry(0.4, 0.6, 0.4);
-    const lanternMaterial = new MeshLambertMaterial({ color: 0x403f3a,  emissive: 0xdeca62 });
+    const lanternColours = [0xdb9a44, 0xd95e38];
+    const url = './obj/lamp.obj';
+    const loader = new OBJLoader();
+    const paperBaseColour = LoaderManager.assets['paper'].texture;
     
-    for (let i = 0; i< 150; i++) {
-      const lanternMesh = new Mesh(lanternGeometry, lanternMaterial);
+    for (let i = 0; i< 50; i++) {
+      const lanternMaterial = new MeshLambertMaterial({ 
+          color: 0x403f3a,
+          emissive: getRandomColorForLantern(lanternColours),
+          map: paperBaseColour
+        });
+      loader.load(
+        url,
+        (object) => {
+          // set the material/ colour
+          object.traverse((child) => {
+            if (child instanceof Mesh) {
+              child.material = lanternMaterial;
+            }
+          });
+          let lanternMesh = object;
+          // Generate random positions within the range
+          const x = (Math.random() - 0.5) * 45;
+          const y = (Math.random() - 0.5) * 45 + 18;
+          const z = (Math.random() - 0.5) * 45;
 
-      // Generate random positions within the range
-      const x = (Math.random() - 0.5) * 30;
-      const y = (Math.random() - 0.5) * 30 + 15;
-      const z = (Math.random() - 0.5) * 30;
+          // point light inside the mesh to glow
+          const pointLight = new PointLight(0xffcc00, 60, 10);
+          pointLight.position.set(x, y, z);
+          lanternMesh.add(pointLight);
 
-      // point light inside the mesh to glow
-      const pointLight = new PointLight(0xffcc00, 10, 10);
-      pointLight.position.set(x, y, z);
-      lanternMesh.add(pointLight);
-
-      lanternMesh.position.set(x, y, z); 
-      this.#scene.add(lanternMesh);
+          lanternMesh.position.set(x, y, z);
+          lanternMesh.scale.set(0.4,0.5,0.4);
+          this.#scene.add(lanternMesh);
+        }
+        ),
+        (xhr) => {
+          console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+        },
+        (error) => {
+          console.error('An error loading the box', error);
+        };
     }
     
 
@@ -179,7 +212,7 @@ export default class MainScene {
       0.02
     );
     bloomPass.threshold = 0.25;
-    bloomPass.strength = 0.45;
+    bloomPass.strength = 0.4;
     bloomPass.radius = 0.1;
 
     const bloomComposer = new EffectComposer(this.#renderer);
@@ -192,14 +225,55 @@ export default class MainScene {
   }
 
   setMountain() {
-    const mountainSpriteTexture = LoaderManager.assets['mountain'].texture;
-    const mountainSpriteMaterial = new SpriteMaterial({ map: mountainSpriteTexture });
-    const mountainSprite = new Sprite(mountainSpriteMaterial);
-    mountainSprite.position.set(-50, 16, -50);
-    mountainSprite.scale.set(150,40,40);
-    
-    this.#mountainSprite = mountainSprite;
-    this.#scene.add(this.#mountainSprite);
+    const url = './obj/mountain1.obj';
+    const loader = new OBJLoader();
+    loader.load(
+    url,
+    (object) => {
+      // set the material/ colour
+      object.traverse((child) => {
+        if (child instanceof Mesh) {
+          child.material = new MeshLambertMaterial({ color: 0x34323d });
+        }
+      });
+      this.#mountain = object;
+      this.#mountain.position.set(-55, 30, -50);
+      this.#mountain.rotation.y = Math.PI / 4; //90 degree
+      this.#mountain.scale.set(80,120,80);
+      this.#scene.add(this.#mountain);
+    }
+    ),
+    (xhr) => {
+      console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+    },
+    (error) => {
+      console.error('An error loading the boat', error);
+    };
+  }
+
+  setTree(x,y,z) {
+    const url = './obj/tree.obj';
+    const loader = new OBJLoader();
+    loader.load(
+    url,
+    (object) => {
+      // set the material/ colour
+      object.traverse((child) => {
+        if (child instanceof Mesh) {
+          child.material = new MeshLambertMaterial({ color: 0x34323d });
+        }
+      });
+      object.position.set(x,y,z);
+      object.scale.set(0.5,0.5,0.5);
+      this.#scene.add(object);
+    }
+    ),
+    (xhr) => {
+      console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+    },
+    (error) => {
+      console.error('An error loading the boat', error);
+    };
   }
 
   // code from three.js example: https://github.com/mrdoob/three.js/blob/master/examples/webgl_mirror.html
@@ -284,8 +358,6 @@ export default class MainScene {
     this.#groundMirror.material.uniforms.time.value += 0.1;
     this.#bloomComposer.render();
 
-    updateMountainSprite(this.#camera, this.#mountainSprite);
-
     this.#stats.end()
     this.raf = window.requestAnimationFrame(this.draw)
   }
@@ -325,9 +397,7 @@ function createGradientCanvas (width, height, colors) {
   return canvas;
 }
 
-// want the sprite to face the camera no matter what
-function updateMountainSprite(camera, mountainSprite) {
-  const cameraPosition = camera.position.clone();
-  cameraPosition.y = mountainSprite.position.y;
-  mountainSprite.lookAt(cameraPosition);
+function getRandomColorForLantern(colorArray) {
+  const randomIndex = Math.floor(Math.random() * colorArray.length);
+  return colorArray[randomIndex];
 }

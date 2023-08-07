@@ -8,7 +8,7 @@ varying vec4 vUv;
 
 void main() {
   #include <logdepthbuf_fragment>
-  float waveStrength = 0.15;
+  float waveStrength = 0.35;
   float waveSpeed = 0.02;
   vec2 distortedUv = texture2D( tDudv, vec2( vUv.x + time * waveSpeed, vUv.y ) ).rg * waveStrength;
   distortedUv = vUv.xy + vec2( distortedUv.x, distortedUv.y + time * waveSpeed );
