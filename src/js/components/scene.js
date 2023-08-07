@@ -181,12 +181,12 @@ export default class MainScene {
           });
           let lanternMesh = object;
           // Generate random positions within the range
-          const x = (Math.random() - 0.5) * 45;
-          const y = (Math.random() - 0.5) * 45 + 18;
-          const z = (Math.random() - 0.5) * 45;
+          const x = (Math.random() - 0.5) * 40;
+          const y = (Math.random() - 0.5) * 40 + 18;
+          const z = (Math.random() - 0.5) * 40;
 
           // point light inside the mesh to glow
-          const pointLight = new PointLight(0xffcc00, 60, 10);
+          const pointLight = new PointLight(0xffcc00, 120, 10);
           pointLight.position.set(x, y, z);
           lanternMesh.add(pointLight);
 
